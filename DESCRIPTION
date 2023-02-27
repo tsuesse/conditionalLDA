@@ -1,0 +1,26 @@
+Package: conditionalLDA
+Title: Perform spatial LDA and conditional predictions
+Version: 0.0.0.9000
+Authors@R: 
+    person(given = "Thomas",
+           family = "Suesse",
+           role = c("aut", "cre"),
+           email = "tsuesse@uow.edu.au.com",
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+person(given = "Veronika",
+           family = "Grupp",
+           role = c("aut", "cre"),
+           comment = c(ORCID = "YOUR-ORCID-ID"))
+Description: This package implements spatial LDA model fit including covariance function modelling. Predictions can include nearby training observations by means of a conditional multivariate normal distribution (conditional prediction). Predictions can be made for a whole block instead of single observations if block identifiers are given.
+License: What license it uses
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.2.3
+Depends: 
+    MASS,
+    mda,
+    proxy,
+    tibble,
+    Matrix,
+    formula.tools,
+    geoR
