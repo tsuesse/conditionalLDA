@@ -1,4 +1,14 @@
 ---
+title: "Introduction"
+output:
+  md_document:
+    variant: markdown_github
+vignette: >
+  %\VignetteIndexEntry{introduction}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+---
 # Introduction
 
 ```{r, include = FALSE}
@@ -17,66 +27,117 @@ Suesse, T., Grupp. V., Brenning, A. "Spatial Linear Discriminant Analysis Approa
 We do a sample analysis on the Aconcaguia data set.
 The data in the package has been preprocessed. 
 
-```{r setup}
+```{r}
 # install.packages(devtools)
 # library(devtools)
-# devtools::install_github("jcortesr/PerMuTe")
-library(conditionalLDA)
+# devtools::install_github("tsuesse/conditionalLDA")
 ```
+
+
+## Data and Methods
+
+We are using the Aconcagua data set derived from
+Nine cloud-free Landsat-8 images from one growing season with six fruit-tree crop types using 72 spectral features in total, including vegetation indices that were derived from the raw spectral data. The geolocations of pixels are given as (projected) UTM coordinates. The data set includes $n=15,268$ image pixels corresponding to $N=1,525$ agricultural fields. The aim is to classify the croptype of each field.
+
+
+
+Aconcagua data set has the following objects
+* **data_original** original data set Aconcagua
+* **data_generated** data : new data set with artificial coordinates and features generated from multivariate normal with only $n=14,400$ pixels and $1,600$ fields 
+* **formula**  formula for LDA
+* **predictors**  predictors for LDA
+
 
 ```{r}
-image(temp_gistemp[,,1])
-```
-
-Aconcagua data set
-d data 
-formula formula for LDA
-predictors predictors for LDA
-
-
-
-
-
-
-
-
-# conditionalLDA
-
-<!-- badges: start -->
-<!-- badges: end -->
-
-The goal of conditionalLDA is to ...
-
-## Installation
-
-You can install the development version of conditionalLDA from [GitHub](https://github.com/) with:
-
-``` r
-# install.packages("devtools")
-devtools::install_github("tsuesse/conditonalLDA")
-```
-
-## Example
-
-This is a basic example which shows you how to solve a common problem:
-
-```{r example}
 library(conditionalLDA)
-## basic example code
+str(data_original)
+str(data_generated)
+
+block<-"field"
+n_blocks<-100 # sample of n_blocks fields
+trace<-2 # 1 less output, 2 more output
+coords <- c("utmx", "utmy")
+
 ```
 
-What is special about using `README.Rmd` instead of just `README.md`? You can include R chunks like so:
 
-```{r cars}
-summary(cars)
+
+```{r}
+data <- data_original # use original data set
+data <- data_generated # alternatively use generated data set, uncomment to use it
+
+# obtaina sample via 
+s_srs<-obtain_sample_SRS(data, block, ns=ceiling(n_blocks/6), equal.n.var="croptype")$s
 ```
 
-You'll still need to render `README.Rmd` regularly, to keep `README.md` up-to-date. `devtools::build_readme()` is handy for this. You could also use GitHub Actions to re-render `README.Rmd` every time you push. An example workflow can be found here: <https://github.com/r-lib/actions/tree/v1/examples>.
+First we apply standard LDA and apply the majority filter
+```{r}
+# simple LDA pixelwise: LDA function of MASS package
+data_train<-data[s_srs,]
+data_test<-data[-s_srs,]
+fittest <- MASS::lda(formula, data_train)
+pred_lda <- predict(fittest, newdata = data_test, type = response)
+cat("error rate LDA",mean(pred_lda$class != data$croptype[-s_srs]),"\n")
 
-You can also embed plots, for example:
-
-```{r pressure, echo = FALSE}
-plot(pressure)
+# majority filter
+data_test1<-data_test
+data_test1[,"field"]<-as.factor(data_test1[,"field"])
+fac <- block # fac defines field level for majority filter
+pred_maj <- lda_predmaj(fittest, newdata = data_test1, fac = "field")
+cat("error rate majority filter",mean(pred_maj != data$croptype[-s_srs]),"\n")
 ```
 
-In that case, don't forget to commit and push the resulting figure files, so they display on GitHub and CRAN.
+Next we train the spatial model on the transformed feature data, first without coordinates and then with coordinates. For each component $l=1,...,L$ of the transformed feature vectors a spatial stationary and isotropic covariance model is fitted.
+
+```{r}
+# use lda_sp without coordinates, independence imposed on pixels
+  fit_ind <- lda_sp(
+    formula = formula, data = data_train, covs_equal = TRUE, trace = trace,
+    cov_models = NULL,phi_max=800
+  ) # train
+
+
+  # use lda_sp with coordinates
+fit_sp <- lda_sp(
+  formula = formula, data = data_train, covs_equal = TRUE, trace = trace,coords = coords,
+  cov_models = c("matern" ,"exponential","gaussian", "spherical"),max_dist=1000,showplot=TRUE,ini=c(500,0.2),phi_max=800,fixed.model=NULL) 
+```
+
+Lastly we predict and then compare classification error rates
+```{r}
+trace<-1 # to suppress oputput for each field to be classified, set to 2 to show output
+# use fit_sp (conditional spatial LDA) to predict classes
+pred_sp <- predict_cond(fit_sp, data_test, coords = coords, LL = TRUE, trace = trace, blocks = "field", corr_min= 0.1)
+
+
+# use fit_sp (unconditional standard LDA) to predict classes
+pred_ind <- predict_cond(fit_sp, data_test, coords = NULL, LL = TRUE, trace = trace, blocks = "field", corr_min= 0.1)
+  
+
+
+# use fit_lda to predict classes
+pred_ind_lda <- predict_cond(fit_ind, data_test, coords = NULL, LL = TRUE, trace = trace, blocks = "field", corr_min= 0.1)
+
+
+cat("Compare Error Rates\n")
+
+cat("error rate LDA",mean(pred_lda$class != data$croptype[-s_srs]),"\n")
+cat("error rate majority filter",mean(pred_maj != data$croptype[-s_srs]),"\n")
+
+cat("error rate spatial cond LDA",mean(pred_sp$pred != data$croptype[-s_srs]),"\n")
+cat("error rate spatial uncond LDA",mean(pred_sp$pred_un != data$croptype[-s_srs]),"\n")
+
+# 2 methods obtaining the same results
+cat("error rate ind LDA",mean(pred_ind$pred != data$croptype[-s_srs]),"\n")
+cat("error rate ind LDA",mean(pred_ind_lda$pred != data$croptype[-s_srs]),"\n")
+
+# log-lik of training set under independence 
+pred_ind$LLmodel
+
+# log-lik of training set under spatial model
+pred_sp$LLmodel
+
+
+all.equal(as.integer(pred_sp$pred_un),as.integer(pred_ind$pred))
+all.equal(as.integer(pred_sp$pred_un_pr),as.integer(pred_ind$pred_pr))
+```

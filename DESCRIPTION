@@ -9,7 +9,7 @@ Authors@R:
            comment = c(ORCID = "0000-0003-4495-0166")),
      person(given = "Veronika",
            family = "Grupp",
-           role = c("aut", "cre"),
+           role = c("aut"),
            comment = c(ORCID = "0000-0003-4017-2467")))
 Description: This package implements spatial LDA model fit including covariance function modelling. Predictions can include nearby training observations by means of a conditional multivariate normal distribution (conditional prediction). Predictions can be made for a whole block instead of single observations if block identifiers are given.
 License: What license it uses
@@ -23,4 +23,6 @@ Depends:
     tibble,
     Matrix,
     formula.tools,
-    geoR
+    geoR,
+    dplyr,
+    GenSA
